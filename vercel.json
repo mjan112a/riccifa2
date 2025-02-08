@@ -1,18 +1,24 @@
 {
     "version": 2,
+    "framework": "streamlit",
     "builds": [
         {
-            "src": "app.py",
+            "src": "wsgi.py",
             "use": "@vercel/python",
             "config": {
-                "runtime": "python3.9"
+                "runtime": "python3.9",
+                "maxLambdaSize": "15mb"
             }
         }
     ],
     "routes": [
         {
             "src": "/(.*)",
-            "dest": "app.py"
+            "dest": "wsgi.py"
         }
-    ]
+    ],
+    "env": {
+        "PYTHONPATH": ".",
+        "PORT": "8501"
+    }
 }
