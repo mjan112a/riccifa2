@@ -2,10 +2,10 @@
     "version": 2,
     "builds": [
         {
-            "src": "build_files.sh",
-            "use": "@vercel/static-build",
+            "src": "app.py",
+            "use": "@vercel/python",
             "config": {
-                "distDir": "staticfiles"
+                "runtime": "python3.9"
             }
         }
     ],

@@ -1,3 +1,3 @@
-pip install -r requirements.txt
-mkdir -p staticfiles
-python -m streamlit run app.py --server.port 8501 --browser.serverAddress 0.0.0.0
+#!/bin/bash
+python3.9 -m pip install -r requirements.txt
+python3.9 -m streamlit run app.py --server.port $PORT --server.address 0.0.0.0
