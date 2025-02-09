@@ -4,16 +4,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import os
-from dotenv import load_dotenv
 from supabase import create_client
 
-# Load environment variables
-load_dotenv()
-
-# Initialize Supabase client
+# Initialize Supabase client with direct values
 supabase = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_KEY")
+    "https://vnsmqgwwpdssmbtmiwrd.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs"
 )
 
 # Set page config
@@ -46,9 +42,16 @@ df['total_weight_value'] = df['total_weight'].apply(extract_weight)
 # Convert Excel-style dates to datetime
 def excel_date_to_datetime(excel_date):
     try:
-        return pd.to_datetime(excel_date)
-    except:
-        return None
+        # Try to convert to float first to handle Excel numeric dates
+        numeric_date = float(excel_date)
+        # Use 'excel' origin for proper conversion of Excel dates
+        return pd.to_datetime(numeric_date, unit='D', origin='1899-12-30')
+    except (ValueError, TypeError):
+        try:
+            # If not a number, try normal datetime parsing
+            return pd.to_datetime(excel_date)
+        except:
+            return None
 
 # Convert dates
 df['date'] = df['date'].apply(excel_date_to_datetime)
@@ -63,12 +66,21 @@ with tab1:
     st.sidebar.header("Filters")
 
     # Date range selector
-    date_range = st.sidebar.date_input(
-        "Select Date Range",
-        [df['date'].min(), df['date'].max()],
-        min_value=df['date'].min().date(),
-        max_value=df['date'].max().date()
-    )
+    # Get valid min and max dates with error handling
+    valid_dates = df['date'].dropna()
+    if len(valid_dates) > 0:
+        min_date = valid_dates.min()
+        max_date = valid_dates.max()
+        
+        date_range = st.sidebar.date_input(
+            "Select Date Range",
+            [min_date, max_date],
+            min_value=min_date.date(),
+            max_value=max_date.date()
+        )
+    else:
+        st.error("No valid dates found in the data")
+        date_range = []
 
     # Time aggregation selector
     time_agg = st.sidebar.selectbox(
@@ -139,6 +151,18 @@ with tab1:
 
     # Prepare time series data based on selected aggregation
     def aggregate_time_series(df, agg_level):
+        # Create a copy to avoid modifying the original dataframe
+        df = df.copy()
+        
+        # Ensure date column is datetime
+        df['date'] = pd.to_datetime(df['date'], errors='coerce')
+        
+        # Drop rows where date conversion failed
+        df = df[df['date'].notna()]
+        
+        if df.empty:
+            return pd.DataFrame(columns=['period', 'total_weight_value', 'material'])
+            
         if agg_level == "Daily":
             df['period'] = df['date'].dt.date
         elif agg_level == "Weekly":
@@ -151,32 +175,34 @@ with tab1:
             'material': 'count'
         }).reset_index()
 
-    time_series_data = aggregate_time_series(filtered_df, time_agg)
+    # Create time series plot if data exists
+    if not filtered_df.empty:
+        time_series_data = aggregate_time_series(filtered_df, time_agg)
+        fig_time = go.Figure()
+        fig_time.add_trace(go.Scatter(
+            x=time_series_data['period'],
+            y=time_series_data['total_weight_value'],
+            name='Total Weight',
+            mode='lines+markers'
+        ))
+        fig_time.add_trace(go.Scatter(
+            x=time_series_data['period'],
+            y=time_series_data['material'],
+            name='Number of Orders',
+            yaxis='y2',
+            mode='lines+markers'
+        ))
 
-    # Create time series plot
-    fig_time = go.Figure()
-    fig_time.add_trace(go.Scatter(
-        x=time_series_data['period'],
-        y=time_series_data['total_weight_value'],
-        name='Total Weight',
-        mode='lines+markers'
-    ))
-    fig_time.add_trace(go.Scatter(
-        x=time_series_data['period'],
-        y=time_series_data['material'],
-        name='Number of Orders',
-        yaxis='y2',
-        mode='lines+markers'
-    ))
+        fig_time.update_layout(
+            title=f'{time_agg} Trends',
+            yaxis=dict(title='Total Weight (lbs)'),
+            yaxis2=dict(title='Number of Orders', overlaying='y', side='right'),
+            hovermode='x unified'
+        )
 
-    fig_time.update_layout(
-        title=f'{time_agg} Trends',
-        yaxis=dict(title='Total Weight (lbs)'),
-        yaxis2=dict(title='Number of Orders', overlaying='y', side='right'),
-        hovermode='x unified'
-    )
-
-    st.plotly_chart(fig_time, use_container_width=True)
+        st.plotly_chart(fig_time, use_container_width=True)
+    else:
+        st.write("No data available for the selected time period")
 
     # Material Analysis Section
     st.header("Material Analysis")
@@ -184,45 +210,58 @@ with tab1:
 
     with col1:
         # Material Distribution
-        material_counts = filtered_df['material'].value_counts().reset_index()
-        material_counts.columns = ['Material', 'Count']
-        material_counts = material_counts[material_counts['Material'].notna()]
+        if not filtered_df.empty:
+            material_counts = filtered_df['material'].value_counts().reset_index()
+            material_counts.columns = ['Material', 'Count']
+            material_counts = material_counts[material_counts['Material'].notna()]
 
-        fig_distribution = px.pie(material_counts, 
-                                values='Count',
-                                names='Material',
-                                title='Distribution of Materials')
-        st.plotly_chart(fig_distribution)
+            if not material_counts.empty:
+                fig_distribution = px.pie(material_counts, 
+                                    values='Count',
+                                    names='Material',
+                                    title='Distribution of Materials')
+                st.plotly_chart(fig_distribution)
+            else:
+                st.write("No material data available for the selected filters")
+        else:
+            st.write("No data available for the selected filters")
 
     with col2:
         # Material Form Analysis
-        material_form_counts = filtered_df.groupby(['material', 'material_form']).agg({
-            'total_weight_value': ['sum', 'count', lambda x: x.mean()],
-            'amount': 'sum'
-        }).reset_index()
-        
-        # Flatten column names and rename
-        material_form_counts.columns = ['material', 'material_form', 'total_weight', 'order_count', 'avg_order_size', 'total_income']
-        
-        # Format the hover text
-        material_form_counts['hover_text'] = (
-            'Total Weight: ' + material_form_counts['total_weight'].round(0).astype(str) + ' lbs<br>' +
-            'Orders: ' + material_form_counts['order_count'].astype(str) + '<br>' +
-            'Avg Order: ' + material_form_counts['avg_order_size'].round(0).astype(str) + ' lbs<br>' +
-            'Total Income: $' + (-material_form_counts['total_income']).round(2).astype(str)
-        )
-        
-        fig_treemap = px.treemap(material_form_counts,
-                                path=[px.Constant("All"), 'material', 'material_form'],
-                                values='total_weight',
-                                title='Material Hierarchy Analysis',
-                                custom_data=['hover_text'])
-        
-        fig_treemap.update_traces(
-            hovertemplate='%{label}<br>%{customdata[0]}<extra></extra>'
-        )
-        
-        st.plotly_chart(fig_treemap)
+        if not filtered_df.empty:
+            material_form_counts = filtered_df.groupby(['material', 'material_form']).agg({
+                'total_weight_value': ['sum', 'count', lambda x: x.mean()],
+                'amount': 'sum'
+            }).reset_index()
+            
+            if not material_form_counts.empty:
+                # Flatten column names and rename
+                material_form_counts.columns = ['material', 'material_form', 'total_weight', 'order_count', 'avg_order_size', 'total_income']
+                
+                # Format the hover text
+                material_form_counts['hover_text'] = (
+                    'Total Weight: ' + material_form_counts['total_weight'].round(0).astype(str) + ' lbs<br>' +
+                    'Orders: ' + material_form_counts['order_count'].astype(str) + '<br>' +
+                    'Avg Order: ' + material_form_counts['avg_order_size'].round(0).astype(str) + ' lbs<br>' +
+                    'Total Income: $' + (-material_form_counts['total_income']).round(2).astype(str)
+                )
+                
+                fig_treemap = px.treemap(material_form_counts,
+                                    path=[px.Constant("All"), 'material', 'material_form'],
+                                    values='total_weight',
+                                    title='Material Hierarchy Analysis',
+                                    custom_data=['hover_text'])
+                
+                fig_treemap.update_traces(
+                    hovertemplate='%{label}<br>%{customdata[0]}<extra></extra>'
+                )
+                
+                st.plotly_chart(fig_treemap)
+            else:
+                st.write("No material form data available for the selected filters")
+        else:
+            st.write("No data available for the selected filters")
+
 
 with tab2:
     st.title("Profit Analysis")
@@ -249,82 +288,114 @@ with tab2:
 
     # Profit Over Time
     st.header("Profit Trends")
-    profit_time = filtered_df.groupby(filtered_df['date'].dt.to_period(time_agg[0])).agg({
-        'profit': 'sum',
-        'margin': 'mean'
-    }).reset_index()
-    profit_time['date'] = profit_time['date'].astype(str)
+    # Use consistent time aggregation
+    def get_period_str(date_col, agg_level):
+        if agg_level == "Daily":
+            return date_col.dt.date
+        elif agg_level == "Weekly":
+            return date_col.dt.to_period('W').astype(str)
+        else:  # Monthly
+            return date_col.dt.to_period('M').astype(str)
 
-    fig_profit_time = go.Figure()
-    fig_profit_time.add_trace(go.Scatter(
-        x=profit_time['date'],
-        y=profit_time['profit'],
-        name='Profit',
-        mode='lines+markers'
-    ))
-    fig_profit_time.add_trace(go.Scatter(
-        x=profit_time['date'],
-        y=profit_time['margin'],
-        name='Margin %',
-        yaxis='y2',
-        mode='lines+markers'
-    ))
+    # Create profit trends plot if data exists
+    if not filtered_df.empty:
+        profit_time = filtered_df.copy()
+        profit_time['period'] = get_period_str(profit_time['date'], time_agg)
+        profit_time = profit_time.groupby('period').agg({
+            'profit': 'sum',
+            'margin': 'mean'
+        }).reset_index()
 
-    fig_profit_time.update_layout(
-        title=f'Profit and Margin Trends ({time_agg})',
-        yaxis=dict(title='Profit ($)'),
-        yaxis2=dict(title='Margin (%)', overlaying='y', side='right'),
-        hovermode='x unified'
-    )
-    st.plotly_chart(fig_profit_time, use_container_width=True)
+        fig_profit_time = go.Figure()
+        fig_profit_time.add_trace(go.Scatter(
+            x=profit_time['period'],
+            y=profit_time['profit'],
+            name='Profit',
+            mode='lines+markers'
+        ))
+        fig_profit_time.add_trace(go.Scatter(
+            x=profit_time['period'],
+            y=profit_time['margin'],
+            name='Margin %',
+            yaxis='y2',
+            mode='lines+markers'
+        ))
+
+        fig_profit_time.update_layout(
+            title=f'Profit and Margin Trends ({time_agg})',
+            yaxis=dict(title='Profit ($)'),
+            yaxis2=dict(title='Margin (%)', overlaying='y', side='right'),
+            hovermode='x unified'
+        )
+        st.plotly_chart(fig_profit_time, use_container_width=True)
+    else:
+        st.write("No data available for the selected time period")
 
     # Profit by Material
     st.header("Profit by Material")
     col1, col2 = st.columns(2)
 
     with col1:
-        material_profit = filtered_df.groupby('material').agg({
-            'profit': 'sum',
-            'margin': 'mean'
-        }).reset_index()
+        if not filtered_df.empty:
+            material_profit = filtered_df.groupby('material').agg({
+                'profit': 'sum',
+                'margin': 'mean'
+            }).reset_index()
 
-        fig_material_profit = px.bar(material_profit,
-                                   x='material',
-                                   y=['profit', 'margin'],
-                                   title='Profit and Margin by Material',
-                                   barmode='group')
-        st.plotly_chart(fig_material_profit)
+            if not material_profit.empty:
+                fig_material_profit = px.bar(material_profit,
+                                       x='material',
+                                       y=['profit', 'margin'],
+                                       title='Profit and Margin by Material',
+                                       barmode='group')
+                st.plotly_chart(fig_material_profit)
+            else:
+                st.write("No material profit data available for the selected filters")
+        else:
+            st.write("No data available for the selected filters")
 
     with col2:
-        # Profit by Customer
-        customer_profit = filtered_df.groupby('customer_name').agg({
-            'profit': 'sum',
-            'margin': 'mean'
-        }).reset_index().sort_values('profit', ascending=False).head(10)
+        if not filtered_df.empty:
+            # Profit by Customer
+            customer_profit = filtered_df.groupby('customer_name').agg({
+                'profit': 'sum',
+                'margin': 'mean'
+            }).reset_index().sort_values('profit', ascending=False).head(10)
 
-        fig_customer_profit = px.bar(customer_profit,
-                                   x='customer_name',
-                                   y=['profit', 'margin'],
-                                   title='Top 10 Customers by Profit',
-                                   barmode='group')
-        fig_customer_profit.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig_customer_profit)
+            if not customer_profit.empty:
+                fig_customer_profit = px.bar(customer_profit,
+                                       x='customer_name',
+                                       y=['profit', 'margin'],
+                                       title='Top 10 Customers by Profit',
+                                       barmode='group')
+                fig_customer_profit.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_customer_profit)
+            else:
+                st.write("No customer profit data available for the selected filters")
+        else:
+            st.write("No data available for the selected filters")
 
     # Profit Heatmap
     st.header("Profit Analysis by Customer and Material")
-    profit_heatmap = filtered_df.pivot_table(
-        values='profit',
-        index='customer_name',
-        columns='material',
-        aggfunc='sum',
-        fill_value=0
-    ).head(10)  # Top 10 customers
+    if not filtered_df.empty:
+        profit_heatmap = filtered_df.pivot_table(
+            values='profit',
+            index='customer_name',
+            columns='material',
+            aggfunc='sum',
+            fill_value=0
+        ).head(10)  # Top 10 customers
 
-    fig_profit_heatmap = px.imshow(profit_heatmap,
-                                  title='Customer-Material Profit Heatmap',
-                                  aspect='auto',
-                                  color_continuous_scale='RdYlGn')  # Red for low profit, green for high profit
-    st.plotly_chart(fig_profit_heatmap)
+        if not profit_heatmap.empty:
+            fig_profit_heatmap = px.imshow(profit_heatmap,
+                                      title='Customer-Material Profit Heatmap',
+                                      aspect='auto',
+                                      color_continuous_scale='RdYlGn')  # Red for low profit, green for high profit
+            st.plotly_chart(fig_profit_heatmap)
+        else:
+            st.write("No profit heatmap data available for the selected filters")
+    else:
+        st.write("No data available for the selected filters")
 
     # Detailed Profit Data
     st.header("Detailed Profit Data")
