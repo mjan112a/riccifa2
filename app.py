@@ -4,14 +4,28 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 from supabase import create_client
+
+# Load environment variables
+load_dotenv()
+
+# Set up proxy configuration for Heroku
+if os.environ.get('DYNO'):  # Check if running on Heroku
+    os.environ['HTTP_PROXY'] = os.environ.get('QUOTAGUARDSTATIC_URL', '')
+    os.environ['HTTPS_PROXY'] = os.environ.get('QUOTAGUARDSTATIC_URL', '')
 
 # Initialize Supabase client with error handling
 try:
-    supabase = create_client(
-        "https://vnsmqgwwpdssmbtmiwrd.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs"
-    )
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    
+    if not supabase_url or not supabase_key:
+        st.error("Supabase configuration missing. Please check environment variables.")
+        st.stop()
+    
+    # Initialize without any additional options
+    supabase = create_client(supabase_url, supabase_key)
 except Exception as e:
     st.error(f"Failed to initialize Supabase client: {str(e)}")
     st.stop()
