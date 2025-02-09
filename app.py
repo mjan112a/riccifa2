@@ -1,9 +1,20 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+from supabase import create_client
+
+# Load environment variables
+load_dotenv()
+
+# Initialize Supabase client
+supabase = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_KEY")
+)
 
 # Set page config
 st.set_page_config(layout="wide")
@@ -12,15 +23,9 @@ st.set_page_config(layout="wide")
 if 'material_costs' not in st.session_state:
     st.session_state.material_costs = {}
 
-# Connect to the SQLite database
-conn = sqlite3.connect('invoices.db')
-
-# Query the invoices table
-query = "SELECT * FROM invoices"
-df = pd.read_sql_query(query, conn)
-
-# Close the database connection
-conn.close()
+# Query the invoices table from Supabase
+response = supabase.table('invoices').select("*").execute()
+df = pd.DataFrame(response.data)
 
 # Remove rows without total weight
 df = df[df['total_weight'].notna() & (df['total_weight'] != '')]
@@ -41,67 +46,12 @@ df['total_weight_value'] = df['total_weight'].apply(extract_weight)
 # Convert Excel-style dates to datetime
 def excel_date_to_datetime(excel_date):
     try:
-        return pd.Timestamp('1899-12-30') + pd.Timedelta(days=float(excel_date))
+        return pd.to_datetime(excel_date)
     except:
         return None
 
 # Convert dates
 df['date'] = df['date'].apply(excel_date_to_datetime)
-
-# Sidebar filters
-st.sidebar.header("Filters")
-
-# Date range selector
-date_range = st.sidebar.date_input(
-    "Select Date Range",
-    [df['date'].min(), df['date'].max()],
-    min_value=df['date'].min().date(),
-    max_value=df['date'].max().date()
-)
-
-# Time aggregation selector
-time_agg = st.sidebar.selectbox(
-    "Time Aggregation",
-    ["Daily", "Weekly", "Monthly"]
-)
-
-# Material and customer filters
-material_types = ['All'] + sorted(df['material'].dropna().unique().tolist())
-selected_material = st.sidebar.selectbox("Select Material Type", material_types)
-
-customer_names = ['All'] + sorted(df['customer_name'].unique().tolist())
-selected_customer = st.sidebar.selectbox("Select Customer", customer_names)
-
-# Cost inputs in sidebar
-st.sidebar.header("Material Costs (per lb)")
-unique_material_forms = sorted(df['material_form'].dropna().unique())
-for form in unique_material_forms:
-    if form not in st.session_state.material_costs:
-        st.session_state.material_costs[form] = 0.0
-    st.session_state.material_costs[form] = st.sidebar.number_input(
-        f"Cost for {form}",
-        value=float(st.session_state.material_costs[form]),
-        step=0.01,
-        format="%.2f"
-    )
-
-# Filter data based on selections
-filtered_df = df.copy()
-if len(date_range) == 2:
-    filtered_df = filtered_df[
-        (filtered_df['date'].dt.date >= date_range[0]) &
-        (filtered_df['date'].dt.date <= date_range[1])
-    ]
-if selected_material != 'All':
-    filtered_df = filtered_df[filtered_df['material'] == selected_material]
-if selected_customer != 'All':
-    filtered_df = filtered_df[filtered_df['customer_name'] == selected_customer]
-
-# Calculate profits
-filtered_df['cost_per_lb'] = filtered_df['material_form'].map(st.session_state.material_costs)
-filtered_df['total_cost'] = filtered_df['total_weight_value'] * filtered_df['cost_per_lb']
-filtered_df['profit'] = -filtered_df['amount'] - filtered_df['total_cost']  # Negative amount because income is stored as negative
-filtered_df['margin'] = (filtered_df['profit'] / -filtered_df['amount']) * 100  # Calculate margin as percentage
 
 # Create tabs
 tab1, tab2 = st.tabs(["Material Analysis", "Profit Analysis"])
@@ -109,6 +59,61 @@ tab1, tab2 = st.tabs(["Material Analysis", "Profit Analysis"])
 with tab1:
     st.title("Advanced Material Data Explorer")
     
+    # Sidebar filters
+    st.sidebar.header("Filters")
+
+    # Date range selector
+    date_range = st.sidebar.date_input(
+        "Select Date Range",
+        [df['date'].min(), df['date'].max()],
+        min_value=df['date'].min().date(),
+        max_value=df['date'].max().date()
+    )
+
+    # Time aggregation selector
+    time_agg = st.sidebar.selectbox(
+        "Time Aggregation",
+        ["Daily", "Weekly", "Monthly"]
+    )
+
+    # Material and customer filters
+    material_types = ['All'] + sorted(df['material'].dropna().unique().tolist())
+    selected_material = st.sidebar.selectbox("Select Material Type", material_types)
+
+    customer_names = ['All'] + sorted(df['customer_name'].unique().tolist())
+    selected_customer = st.sidebar.selectbox("Select Customer", customer_names)
+
+    # Cost inputs in sidebar
+    st.sidebar.header("Material Costs (per lb)")
+    unique_material_forms = sorted(df['material_form'].dropna().unique())
+    for form in unique_material_forms:
+        if form not in st.session_state.material_costs:
+            st.session_state.material_costs[form] = 0.0
+        st.session_state.material_costs[form] = st.sidebar.number_input(
+            f"Cost for {form}",
+            value=float(st.session_state.material_costs[form]),
+            step=0.01,
+            format="%.2f"
+        )
+
+    # Filter data based on selections
+    filtered_df = df.copy()
+    if len(date_range) == 2:
+        filtered_df = filtered_df[
+            (filtered_df['date'].dt.date >= date_range[0]) &
+            (filtered_df['date'].dt.date <= date_range[1])
+        ]
+    if selected_material != 'All':
+        filtered_df = filtered_df[filtered_df['material'] == selected_material]
+    if selected_customer != 'All':
+        filtered_df = filtered_df[filtered_df['customer_name'] == selected_customer]
+
+    # Calculate profits
+    filtered_df['cost_per_lb'] = filtered_df['material_form'].map(st.session_state.material_costs)
+    filtered_df['total_cost'] = filtered_df['total_weight_value'] * filtered_df['cost_per_lb']
+    filtered_df['profit'] = -filtered_df['amount'] - filtered_df['total_cost']  # Negative amount because income is stored as negative
+    filtered_df['margin'] = (filtered_df['profit'] / -filtered_df['amount']) * 100  # Calculate margin as percentage
+
     # Overview metrics in expanded format
     st.header("Overview")
     col1, col2, col3, col4 = st.columns(4)
