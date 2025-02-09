@@ -1,12 +1,10 @@
 {
     "version": 2,
-    "framework": "streamlit",
     "builds": [
         {
-            "src": "wsgi.py",
+            "src": "vercel_app.py",
             "use": "@vercel/python",
             "config": {
-                "runtime": "python3.9",
                 "maxLambdaSize": "15mb"
             }
         }
@@ -14,12 +12,15 @@
     "routes": [
         {
             "src": "/(.*)",
-            "dest": "wsgi.py"
+            "dest": "vercel_app.py"
         }
     ],
     "env": {
         "PYTHONPATH": ".",
-        "PORT": "8501",
+        "STREAMLIT_SERVER_PORT": "8501",
+        "STREAMLIT_SERVER_ADDRESS": "0.0.0.0",
+        "STREAMLIT_SERVER_HEADLESS": "true",
+        "STREAMLIT_SERVER_FILE_WATCHER_TYPE": "none",
         "SUPABASE_URL": "https://vnsmqgwwpdssmbtmiwrd.supabase.co",
         "SUPABASE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs"
     }
