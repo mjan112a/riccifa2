@@ -6,10 +6,20 @@ from datetime import datetime
 import os
 from supabase import create_client
 
-# Initialize Supabase client with direct values
+# Initialize Supabase client with direct values and options
+options = {
+    'headers': {
+        'X-Client-Info': 'supabase-py/2.3.0',
+    },
+    'auth': {
+        'persistSession': False
+    }
+}
+
 supabase = create_client(
     "https://vnsmqgwwpdssmbtmiwrd.supabase.co",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs"
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs",
+    options=options
 )
 
 # Set page config
