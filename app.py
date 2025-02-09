@@ -6,21 +6,15 @@ from datetime import datetime
 import os
 from supabase import create_client
 
-# Initialize Supabase client with direct values and options
-options = {
-    'headers': {
-        'X-Client-Info': 'supabase-py/2.3.0',
-    },
-    'auth': {
-        'persistSession': False
-    }
-}
-
-supabase = create_client(
-    "https://vnsmqgwwpdssmbtmiwrd.supabase.co",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs",
-    options=options
-)
+# Initialize Supabase client with error handling
+try:
+    supabase = create_client(
+        "https://vnsmqgwwpdssmbtmiwrd.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs"
+    )
+except Exception as e:
+    st.error(f"Failed to initialize Supabase client: {str(e)}")
+    st.stop()
 
 # Set page config
 st.set_page_config(layout="wide")
@@ -54,9 +48,16 @@ if not st.session_state.authenticated:
 if 'material_costs' not in st.session_state:
     st.session_state.material_costs = {}
 
-# Query the invoices table from Supabase
-response = supabase.table('invoices').select("*").execute()
-df = pd.DataFrame(response.data)
+# Query the invoices table from Supabase with error handling
+try:
+    response = supabase.table('invoices').select("*").execute()
+    df = pd.DataFrame(response.data)
+    if df.empty:
+        st.error("No data retrieved from Supabase")
+        st.stop()
+except Exception as e:
+    st.error(f"Failed to fetch data from Supabase: {str(e)}")
+    st.stop()
 
 # Remove rows without total weight
 df = df[df['total_weight'].notna() & (df['total_weight'] != '')]
