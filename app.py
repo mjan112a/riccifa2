@@ -15,6 +15,31 @@ supabase = create_client(
 # Set page config
 st.set_page_config(layout="wide")
 
+# Initialize authentication state
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+# Authentication credentials - store these securely in production
+VALID_USERS = {
+    "admin": "riccifa2024",  # You can change these credentials later
+}
+
+# Login form if not authenticated
+if not st.session_state.authenticated:
+    st.title("Login Required")
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submit = st.form_submit_button("Login")
+        
+        if submit:
+            if username in VALID_USERS and password == VALID_USERS[username]:
+                st.session_state.authenticated = True
+                st.experimental_rerun()
+            else:
+                st.error("Invalid username or password")
+    st.stop()
+
 # Initialize session state for costs if not exists
 if 'material_costs' not in st.session_state:
     st.session_state.material_costs = {}
