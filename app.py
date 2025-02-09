@@ -57,7 +57,7 @@ def excel_date_to_datetime(excel_date):
 df['date'] = df['date'].apply(excel_date_to_datetime)
 
 # Create tabs
-tab1, tab2 = st.tabs(["Material Analysis", "Profit Analysis"])
+tab1, tab2, tab3, tab4 = st.tabs(["Material Analysis", "Profit Analysis", "Interactive Metrics", "Raw Data"])
 
 with tab1:
     st.title("Advanced Material Data Explorer")
@@ -411,6 +411,180 @@ with tab2:
     else:
         st.write("No data available for the selected filters.")
 
-# Footer
+with tab3:
+    st.title("Interactive Metrics Analysis")
+
+    # Weight vs Time and Client and Segment
+    st.header("Weight Analysis by Time, Client, and Segment")
+    
+    # Get unique segments for filtering
+    segments = ['All'] + sorted(filtered_df['material_form'].unique().tolist())
+    selected_segment = st.selectbox("Select Segment", segments, key='segment_selector')
+    
+    # Filter by segment if needed
+    segment_df = filtered_df if selected_segment == 'All' else filtered_df[filtered_df['material_form'] == selected_segment]
+    
+    if not segment_df.empty:
+        # Prepare time series data with client breakdown
+        weight_time_client = segment_df.copy()
+        weight_time_client['period'] = get_period_str(weight_time_client['date'], time_agg)
+        weight_time_client = weight_time_client.groupby(['period', 'customer_name'])['total_weight_value'].sum().reset_index()
+        
+        # Create interactive weight vs time plot
+        fig_weight_client = px.line(weight_time_client,
+                                  x='period',
+                                  y='total_weight_value',
+                                  color='customer_name',
+                                  title=f'Weight Trends by Client ({time_agg})',
+                                  labels={'total_weight_value': 'Total Weight (lbs)',
+                                         'period': 'Time Period',
+                                         'customer_name': 'Client'})
+        fig_weight_client.update_layout(hovermode='x unified')
+        st.plotly_chart(fig_weight_client, use_container_width=True)
+    else:
+        st.write("No data available for the selected filters")
+
+    # Other Metrics vs Time
+    st.header("Multiple Metrics Analysis")
+    
+    # Define available metrics
+    metrics = {
+        'Total Revenue': lambda df: -df['amount'].sum(),
+        'Average Order Value': lambda df: -df['amount'].mean(),
+        'Profit per Order': lambda df: df['profit'].mean(),
+        'Orders per Customer': lambda df: df.groupby('customer_name').size().mean(),
+        'Average Margin': lambda df: df['margin'].mean(),
+        'Total Weight per Order': lambda df: df['total_weight_value'].mean()
+    }
+    
+    # Let user select metrics to display
+    selected_metrics = st.multiselect(
+        "Select Metrics to Display",
+        list(metrics.keys()),
+        default=['Total Revenue', 'Average Margin']
+    )
+    
+    if selected_metrics and not filtered_df.empty:
+        # Prepare time series data for selected metrics
+        metrics_df = filtered_df.copy()
+        metrics_df['period'] = get_period_str(metrics_df['date'], time_agg)
+        
+        # Calculate metrics over time
+        metrics_over_time = []
+        for period in sorted(metrics_df['period'].unique()):
+            period_data = metrics_df[metrics_df['period'] == period]
+            period_metrics = {'period': period}
+            for metric in selected_metrics:
+                period_metrics[metric] = metrics[metric](period_data)
+            metrics_over_time.append(period_metrics)
+        
+        metrics_df = pd.DataFrame(metrics_over_time)
+        
+        # Create interactive multi-metric plot
+        fig_metrics = go.Figure()
+        for metric in selected_metrics:
+            fig_metrics.add_trace(go.Scatter(
+                x=metrics_df['period'],
+                y=metrics_df[metric],
+                name=metric,
+                mode='lines+markers'
+            ))
+        
+        fig_metrics.update_layout(
+            title='Multiple Metrics Over Time',
+            hovermode='x unified',
+            showlegend=True
+        )
+        st.plotly_chart(fig_metrics, use_container_width=True)
+    else:
+        st.write("Please select at least one metric to display")
+
+    # Quantity of Orders by Client Monthly by Segment
+    st.header("Monthly Order Analysis")
+    
+    if not filtered_df.empty:
+        # Prepare monthly order data
+        monthly_orders = filtered_df.copy()
+        monthly_orders['month'] = monthly_orders['date'].dt.to_period('M').astype(str)
+        monthly_orders = monthly_orders.groupby(['month', 'customer_name', 'material_form']).size().reset_index(name='order_count')
+        
+        # Create heatmap
+        fig_monthly = px.density_heatmap(
+            monthly_orders,
+            x='month',
+            y='customer_name',
+            z='order_count',
+            facet_col='material_form',
+            title='Monthly Order Quantity by Client and Segment',
+            labels={'order_count': 'Number of Orders',
+                   'month': 'Month',
+                   'customer_name': 'Client',
+                   'material_form': 'Segment'},
+            color_continuous_scale='Viridis'
+        )
+        
+        fig_monthly.update_layout(
+            height=600,
+            xaxis_tickangle=-45
+        )
+        st.plotly_chart(fig_monthly, use_container_width=True)
+    else:
+        st.write("No data available for the selected filters")
+
+with tab4:
+    st.title("Raw Supabase Data")
+    
+    # Get all columns from the original dataframe
+    all_columns = df.columns.tolist()
+    
+    # Column selector
+    selected_columns = st.multiselect(
+        "Select Columns to Display",
+        all_columns,
+        default=['date', 'customer_name', 'material', 'material_form', 'total_weight', 'amount']
+    )
+    
+    # Create display dataframe
+    if selected_columns:
+        display_raw_df = df[selected_columns].copy()
+        
+        # Convert date column to readable format if it exists
+        if 'date' in selected_columns:
+            display_raw_df['date'] = display_raw_df['date'].dt.date
+            
+        # Convert amount to positive if it exists
+        if 'amount' in selected_columns:
+            display_raw_df['amount'] = -display_raw_df['amount']
+        
+        # Add search functionality
+        search_term = st.text_input("Search in any column", "")
+        
+        if search_term:
+            mask = pd.DataFrame([display_raw_df[col].astype(str).str.contains(search_term, case=False, na=False)
+                               for col in display_raw_df.columns]).any()
+            display_raw_df = display_raw_df[mask]
+        
+        # Display row count
+        st.write(f"Showing {len(display_raw_df)} rows")
+        
+        # Display the data with sorting capability
+        st.dataframe(
+            display_raw_df,
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Add download button
+        csv = display_raw_df.to_csv(index=False)
+        st.download_button(
+            label="Download data as CSV",
+            data=csv,
+            file_name="supabase_data.csv",
+            mime="text/csv"
+        )
+    else:
+        st.warning("Please select at least one column to display")
+
+    # Footer
 st.markdown("---")
 st.markdown("Advanced Data Explorer for Material Analysis")
