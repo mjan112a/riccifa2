@@ -7,17 +7,12 @@ import os
 from dotenv import load_dotenv
 from supabase import create_client
 
-# Load environment variables
-load_dotenv()
-
-# Initialize Supabase client with error handling
+# Initialize Supabase client
 try:
-    # Use hardcoded values for now
-    supabase_url = "https://vnsmqgwwpdssmbtmiwrd.supabase.co"
-    supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs"
-    
-    # Create the client
-    supabase = create_client(supabase_url, supabase_key)
+    supabase = create_client(
+        "https://vnsmqgwwpdssmbtmiwrd.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs"
+    )
 except Exception as e:
     st.error(f"Failed to initialize Supabase client: {str(e)}")
     st.stop()
