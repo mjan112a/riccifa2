@@ -17,12 +17,21 @@ if os.environ.get('DYNO'):  # Check if running on Heroku
 
 # Initialize Supabase client with error handling
 try:
+    # First try environment variables
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_KEY")
     
+    # If not found, use hardcoded values
     if not supabase_url or not supabase_key:
-        st.error("Supabase configuration missing. Please check environment variables.")
-        st.stop()
+        st.warning("Environment variables not found, using default configuration")
+        supabase_url = "https://vnsmqgwwpdssmbtmiwrd.supabase.co"
+        supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuc21xZ3d3cGRzc21idG1pd3JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkwNTk0NzUsImV4cCI6MjA1NDYzNTQ3NX0.yOWDTHq8GluOgjnAeEFj1hm0aE3ll1Axz9bSpnFHaFs"
+    
+    # Add debug information
+    st.write("Debug Info:")
+    st.write(f"Running on Heroku: {'Yes' if os.environ.get('DYNO') else 'No'}")
+    st.write(f"Proxy URL: {os.environ.get('QUOTAGUARDSTATIC_URL', 'Not set')}")
+    st.write(f"Using URL: {supabase_url}")
     
     # Initialize without any additional options
     supabase = create_client(supabase_url, supabase_key)
